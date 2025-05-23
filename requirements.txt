@@ -1,0 +1,10 @@
+anytree
+OpenHowNet
+opencc-python-reimplemented
+jieba
+datasets
+tqdm
+gradio
+sentence-transformers
+faiss-cpu
+scikit-learn
