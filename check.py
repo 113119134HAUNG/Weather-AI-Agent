@@ -239,7 +239,7 @@ CLIMATE_EXCLUDE_FROM_WEATHER = ["強降雨事件", "年降雨量", "梅雨季", 
 # 主分類邏輯
 def build_precise_maps(flattened_data):
     category_term_sets = defaultdict(set)
-    custom_synonym_map = {}
+    custom_synonym_map = {}）
     classified_terms = set()
     unclassified_terms = set()
     reclassified_terms = []
@@ -249,10 +249,13 @@ def build_precise_maps(flattened_data):
         synonyms = entry.get("synonyms", [])
         zh_words = zh_entry if isinstance(zh_entry, list) else [zh_entry]
         all_words = zh_words + synonyms
+
+        # 取得標準化的主要詞彙
         standard_word = st.normalize_text(zh_words[0]) if zh_words and zh_words[0] else None
         if not standard_word:
             continue
 
+        # 建立所有同義詞的對應關係
         for word in all_words:
             if isinstance(word, str) and word:
                 custom_synonym_map[st.normalize_text(word)] = standard_word
@@ -260,50 +263,51 @@ def build_precise_maps(flattened_data):
         entry["classification"] = []
         entry["triggered_by"] = []
 
+        # 前處理：取出分類線索
         categories = [c.lower() for c in entry.get("categories", [])]
         related_items = [r.lower() for r in entry.get("related_items", [])]
         classified = False
 
-        # 1. 直接由 category ID 判斷
+        # 從 categories 判斷分類
         for cat in categories:
             for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
                 if cat.startswith(prefix):
                     entry["classification"].append(cat_type)
                     entry["triggered_by"].append(cat)
-                    category_term_sets[cat_type].add(standard_word)
-                    classified_terms.add(standard_word)
+                    category_term_sets[cat_type].add(zh_words[0])
+                    classified_terms.add(zh_words[0])
                     classified = True
                     break
             if classified:
                 break
 
-        # 2. 從 id 推斷
+        # 從 ID 前綴判斷
         if not classified:
             item_id = key.lower()
             for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
                 if item_id.startswith(prefix):
                     entry["classification"].append(cat_type)
-                    entry["triggered_by"].append("id:" + item_id)
-                    category_term_sets[cat_type].add(standard_word)
-                    classified_terms.add(standard_word)
+                    entry["triggered_by"].append("依據ID前綴：" + item_id)
+                    category_term_sets[cat_type].add(zh_words[0])
+                    classified_terms.add(zh_words[0])
                     classified = True
                     break
 
-        # 3. 從 related_items 判斷
+        # 從 related_items 判斷
         if not classified:
             for rel_id in related_items:
                 for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
                     if rel_id.startswith(prefix):
                         entry["classification"].append(cat_type)
-                        entry["triggered_by"].append("related:" + rel_id)
-                        category_term_sets[cat_type].add(standard_word)
-                        classified_terms.add(standard_word)
+                        entry["triggered_by"].append("依據關聯ID：" + rel_id)
+                        category_term_sets[cat_type].add(zh_words[0])
+                        classified_terms.add(zh_words[0])
                         classified = True
                         break
                 if classified:
                     break
 
-        # 4. 從語意欄位 (linked_sememe, tags, concepts.zh, concepts.parent, concepts.related_to)
+        # 從語意線索推論分類（linked_sememe、tags、concepts）
         if not classified:
             semantic_clues = []
             linked = entry.get("linked_sememe", {})
@@ -311,6 +315,7 @@ def build_precise_maps(flattened_data):
                 semantic_clues += linked.get("zh", []) if isinstance(linked.get("zh"), list) else [linked.get("zh")]
 
             semantic_clues += entry.get("tags", [])
+
             concepts = entry.get("concepts", {})
             if isinstance(concepts, dict):
                 semantic_clues += concepts.get("related_to", []) if isinstance(concepts.get("related_to"), list) else []
@@ -323,36 +328,37 @@ def build_precise_maps(flattened_data):
                 clue_norm = st.normalize_text(clue)
                 if "氣候" in clue_norm:
                     cat_type = "climate"
-                elif "天氣" in clue_norm or "雷" in clue_norm or "風" in clue_norm:
+                elif any(k in clue_norm for k in ["天氣", "雷", "風", "光學現象"]):
                     cat_type = "weather"
-                elif "地理" in clue_norm or "地形" in clue_norm or "山" in clue_norm:
+                elif any(k in clue_norm for k in ["地理", "地形", "山"]):
                     cat_type = "geo_feature"
-                elif "城市" in clue_norm or "都市" in clue_norm or "行政" in clue_norm:
+                elif any(k in clue_norm for k in ["城市", "都市", "行政"]):
                     cat_type = "location"
                 else:
                     continue
+
                 entry["classification"].append(cat_type)
-                entry["triggered_by"].append("semantic:" + clue)
-                category_term_sets[cat_type].add(standard_word)
-                classified_terms.add(standard_word)
+                entry["triggered_by"].append("語意線索：" + clue)
+                category_term_sets[cat_type].add(zh_words[0])
+                classified_terms.add(zh_words[0])
                 classified = True
                 break
 
-        # 5. 地理名詞後綴推斷
+        # 依據地名詞尾判斷是否為 location
         if not classified:
-            location_suffixes = ["市", "區", "鄉", "鎮", "村", "里", "島"]
+            location_suffixes = ["市", "區", "鄉", "鎮", "村", "里"]
             if any(isinstance(w, str) and w and w[-1] in location_suffixes for w in zh_words):
-                category_term_sets["location"].add(standard_word)
+                category_term_sets["location"].add(zh_words[0])
                 entry["classification"].append("location")
-                entry["triggered_by"].append("suffix_match")
-                classified_terms.add(standard_word)
+                entry["triggered_by"].append("詞尾推斷")
+                classified_terms.add(zh_words[0])
                 classified = True
 
-        # 6. 未分類詞
+        # 無法分類者
         if not classified:
-            unclassified_terms.add(standard_word)
+            unclassified_terms.add(zh_words[0])
 
-    # 語意再分類修正
+    # 根據關鍵詞重新分類為 weather
     for word in list(classified_terms):
         original = None
         for cat, terms in category_term_sets.items():
