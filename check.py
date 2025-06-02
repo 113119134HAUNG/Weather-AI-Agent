@@ -1,5 +1,6 @@
 #check.py
 
+你說：
 import re
 import json
 from collections import defaultdict
@@ -12,7 +13,7 @@ class SimpleNormalizer:
 
 st = SimpleNormalizer()
 
-# 完整遞迴處理所有層級的項目
+# 展平 JSON 結構
 def flatten_sememe_data(data, path=None, results=None):
     if results is None:
         results = {}
@@ -22,7 +23,6 @@ def flatten_sememe_data(data, path=None, results=None):
     if not isinstance(data, dict):
         return results
 
-    # 處理當前層的 items
     if "items" in data and isinstance(data["items"], list):
         for item in data["items"]:
             if not isinstance(item, dict):
@@ -44,17 +44,14 @@ def flatten_sememe_data(data, path=None, results=None):
                 "categories": path.copy()
             }
 
-    # 遞迴處理 categories
     if "categories" in data and isinstance(data["categories"], dict):
         for cat_name, cat_data in data["categories"].items():
             flatten_sememe_data(cat_data, path + [cat_name], results)
 
-    # 遞迴處理 subcategories
     if "subcategories" in data and isinstance(data["subcategories"], dict):
         for subcat_name, subcat_data in data["subcategories"].items():
             flatten_sememe_data(subcat_data, path + [subcat_name], results)
 
-    # 遞迴其他可疑含結構內容的 key（防漏）
     for key, value in data.items():
         if key not in {"items", "categories", "subcategories"}:
             if isinstance(value, dict):
@@ -63,22 +60,25 @@ def flatten_sememe_data(data, path=None, results=None):
 
     return results
 
-# 類別定義與優先順序
-CATEGORY_TREE = {
-    "geo_feature": ["地理", "地理特徵", "水文環境", "地質斷層", "港口與海洋經濟", "國家公園與自然保護區"],
-    "climate": ["氣候", "氣候類型", "氣候現象與季節變化", "氣候指標與統計", "氣候異常與自然災害", "氣候變遷趨勢", "氣候災害與應對", "氣象科技與監測"],
-    "weather": ["天氣", "晴朗與雲量變化", "降水與雷雨現象", "溫度變化", "風力狀況", "能見度與霧象", "劇烈天氣事件", "空氣品質與污染", "季節天氣模式", "大氣光學現象"],
-    "location": ["直轄市", "省轄市", "縣", "縣轄市", "區", "鄉", "鎮", "城市", "都市區", "村", "里", "行政區", "縣轄市/鎮/鄉"]
+# 對應前綴 → 分類型別
+CATEGORY_PREFIX_TO_TYPE = {
+    "tw-geo-": "geo_feature",
+    "tw-climate-": "climate",
+    "tw-weather-": "weather",
+    "weather-air-quality-": "weather",
+    "weather-season-": "weather",
+    "weather-optical-": "weather",
+    "climate-types-": "climate",
+    "tw-city-": "location",
+    "tw-basic-": "location",
 }
-
-CATEGORY_PRIORITY = ["geo_feature", "climate", "weather", "location"]
 
 WEATHER_OVERRIDE = ["冷鋒", "暖鋒", "滯留鋒", "鋒面雨", "雷陣雨", "短時強降雨", "間歇性小雨", "霜凍", "揚沙", "晴朗無雲", "大雷雨", "豪雨", "雷擊"]
 CLIMATE_EXCLUDE_FROM_WEATHER = ["強降雨事件", "年降雨量", "梅雨季", "平均氣溫變化", "氣候區劃"]
 
 # 分類主邏輯
 def build_precise_maps(flattened_data):
-    category_term_sets = {cat: set() for cat in CATEGORY_TREE}
+    category_term_sets = defaultdict(set)
     custom_synonym_map = {}
     classified_terms = set()
     unclassified_terms = set()
@@ -89,7 +89,6 @@ def build_precise_maps(flattened_data):
         synonyms = entry.get("synonyms", [])
         zh_words = zh_entry if isinstance(zh_entry, list) else [zh_entry]
         all_words = zh_words + synonyms
-
         standard_word = st.normalize_text(zh_words[0]) if zh_words and zh_words[0] else None
         if not standard_word:
             continue
@@ -98,22 +97,81 @@ def build_precise_maps(flattened_data):
             if isinstance(word, str) and word:
                 custom_synonym_map[st.normalize_text(word)] = standard_word
 
-        path = entry.get("categories", [])
         entry["classification"] = []
         entry["triggered_by"] = []
 
         classified = False
-        for cat in CATEGORY_PRIORITY:
-            keywords = CATEGORY_TREE[cat]
-            matched = [p for p in path if any(k in p for k in keywords)]
-            if matched:
-                entry["classification"].append(cat)
-                entry["triggered_by"].extend(matched)
-                category_term_sets[cat].add(standard_word)
+
+        # 優先從 categories 判斷分類
+        for cat in entry.get("categories", []):
+            for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
+                if cat.startswith(prefix):
+                    entry["classification"].append(cat_type)
+                    entry["triggered_by"].append(cat)
+                    category_term_sets[cat_type].add(standard_word)
+                    classified_terms.add(standard_word)
+                    classified = True
+                    break
+            if classified:
+                break
+
+        # 如果還沒分類，嘗試從 id 推斷分類
+        if not classified:
+            item_id = key.lower()
+            for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
+                if item_id.startswith(prefix):
+                    entry["classification"].append(cat_type)
+                    entry["triggered_by"].append("id:" + item_id)
+                    category_term_sets[cat_type].add(standard_word)
+                    classified_terms.add(standard_word)
+                    classified = True
+                    break
+
+        # 如果還沒分類，嘗試從 related_items 判斷
+        if not classified:
+            for rel_id in entry.get("related_items", []):
+                rel_id = rel_id.lower()
+                for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
+                    if rel_id.startswith(prefix):
+                        entry["classification"].append(cat_type)
+                        entry["triggered_by"].append("related:" + rel_id)
+                        category_term_sets[cat_type].add(standard_word)
+                        classified_terms.add(standard_word)
+                        classified = True
+                        break
+                if classified:
+                    break
+
+        # 再來從語義詞彙模糊比對（linked_sememe、tags、concepts.related_to）
+        if not classified:
+            semantic_clues = []
+            for field in ["linked_sememe", "tags", "concepts"]:
+                raw = entry.get(field, {})
+                if isinstance(raw, dict):
+                    semantic_clues += raw.get("zh", []) if isinstance(raw.get("zh"), list) else [raw.get("zh")]
+                    semantic_clues += raw.get("related_to", []) if "related_to" in raw else []
+                elif isinstance(raw, list):
+                    semantic_clues += raw
+            for clue in filter(None, semantic_clues):
+                clue_norm = st.normalize_text(clue)
+                if "氣候" in clue_norm:
+                    cat_type = "climate"
+                elif "天氣" in clue_norm or "雷" in clue_norm:
+                    cat_type = "weather"
+                elif "地理" in clue_norm or "地形" in clue_norm:
+                    cat_type = "geo_feature"
+                elif "城市" in clue_norm or "都市" in clue_norm:
+                    cat_type = "location"
+                else:
+                    continue
+                entry["classification"].append(cat_type)
+                entry["triggered_by"].append("semantic:" + clue)
+                category_term_sets[cat_type].add(standard_word)
                 classified_terms.add(standard_word)
                 classified = True
                 break
 
+        # fallback：suffix 判斷地理位置
         if not classified:
             location_suffixes = ["市", "區", "鄉", "鎮", "村", "里", "島"]
             if any(isinstance(w, str) and w and w[-1] in location_suffixes for w in zh_words):
@@ -123,10 +181,11 @@ def build_precise_maps(flattened_data):
                 classified_terms.add(standard_word)
                 classified = True
 
+        # 最後放進未分類集合
         if not classified:
             unclassified_terms.add(standard_word)
 
-    # 語意矯正
+    # 語意矯正再分類
     for word in list(classified_terms):
         original = None
         for cat, terms in category_term_sets.items():
@@ -168,6 +227,5 @@ if __name__ == "__main__":
         for word, from_cat, to_cat in reclassified_terms:
             print(f"    {word}：{from_cat} → {to_cat}")
 
-    # 更新 Synonym 工具
     st_module.set_custom_synonym_map(custom_synonym_map)
     st_module.set_custom_synonyms(flattened_data)
