@@ -146,7 +146,7 @@ def build_precise_maps(flattened_data):
 if __name__ == "__main__":
     import sememe_tools as st_module
 
-    with open("/content/Weather-AI-Agent/sememe_synonym_OK.json", "r", encoding="utf-8") as f:
+    with open("/content/Weather-AI-Agent/sememe_synonym.json", "r", encoding="utf-8") as f:
         raw_data = json.load(f)
 
     flattened_data = flatten_sememe_data(raw_data)
