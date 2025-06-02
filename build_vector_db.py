@@ -8,20 +8,15 @@ from transformers import AutoTokenizer, AutoModel
 import sememe_tools as st
 import vector_utils_advanced as vu
 
-# === 設定與模型初始化 ===
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-base-zh")
-hf_model = AutoModel.from_pretrained("BAAI/bge-base-zh").to(device).eval()
-
 # 處理 NLPCC-MH 資料並建置向量庫
 def prepare_nlpccmh_augmented_data(
-    input_path, index_path, meta_path, model, tokenizer, device, pooling="cls"
+    input_path, index_path, meta_path, model, tokenizer, device, pooling="cls", silent=False
 ):
     assert os.path.exists(input_path), f"找不到輸入檔案: {input_path}"
 
     texts, ids, metas = [], [], []
     with open(input_path, "r", encoding="utf-8") as f:
-        for i, line in enumerate(tqdm(f, desc="處理 NLPCC-MH 資料")):
+        for i, line in enumerate(tqdm(f, desc="處理 NLPCC-MH 資料", disable=silent)):
             entry = json.loads(line.strip())
             question = entry["question"]
             sememe_map = entry["question_sememe_map"]
@@ -47,17 +42,18 @@ def prepare_nlpccmh_augmented_data(
         meta_path=meta_path,
         pooling=pooling
     )
-    print(f"NLPCC-MH 向量庫已建置完成，共 {len(texts)} 筆資料。")
+    if not silent:
+        print(f"NLPCC-MH 向量庫已建置完成，共 {len(texts)} 筆資料。")
 
 # 處理自製同義詞資料，建立向量庫
-def prepare_custom_augmented_data(synonym_path, index_path, meta_path, model, tokenizer, device, pooling="cls"):
+def prepare_custom_augmented_data(synonym_path, index_path, meta_path, model, tokenizer, device, pooling="cls", silent=False):
     assert os.path.exists(synonym_path), f"找不到輸入檔案: {synonym_path}"
 
     texts, ids, metas = [], [], []
     with open(synonym_path, "r", encoding="utf-8") as f:
         synonym_data = json.load(f)
 
-    for i, (key, entry) in enumerate(tqdm(synonym_data.items(), desc="處理自製同義詞資料")):
+    for i, (key, entry) in enumerate(tqdm(synonym_data.items(), desc="處理自製同義詞資料", disable=silent)):
         zh_entry = entry.get("zh", key)
         synonyms = entry.get("synonyms", [])
         categories = entry.get("categories", {})
@@ -105,7 +101,8 @@ def prepare_custom_augmented_data(synonym_path, index_path, meta_path, model, to
         meta_path=meta_path,
         pooling=pooling
     )
-    print(f"自製 Synonym 向量庫已建置完成，共 {len(texts)} 筆資料。")
+    if not silent:
+        print(f"自製 Synonym 向量庫已建置完成，共 {len(texts)} 筆資料。")
 
 # 執行全部向量庫建立
 def run_all_indexing(
@@ -117,33 +114,44 @@ def run_all_indexing(
     custom_meta_path,
     model,
     tokenizer,
-    device
+    device,
+    silent=False
 ):
-    print("開始全流程向量庫建立...")
+    if not silent:
+        print("開始全流程向量庫建立...")
 
     # 先建立 NLPCC
-    print("\n開始建立 NLPCC-MH 向量庫...")
+    if not silent:
+        print("\n開始建立 NLPCC-MH 向量庫...")
     prepare_nlpccmh_augmented_data(
         input_path=nlpcc_input_path,
         index_path=nlpcc_index_path,
         meta_path=nlpcc_meta_path,
         model=model,
         tokenizer=tokenizer,
-        device=device
+        device=device,
+        silent=silent
     )
     # 建立 Custom
-    print("\n開始建立自製 Synonym 向量庫...")
+    if not silent:
+        print("\n開始建立自製 Synonym 向量庫...")
     prepare_custom_augmented_data(
         synonym_path=synonym_path,
         index_path=custom_index_path,
         meta_path=custom_meta_path,
         model=model,
         tokenizer=tokenizer,
-        device=device
+        device=device,
+        silent=silent
     )
-    print("\n全部向量庫建立完成！")
+    if not silent:
+        print("\n全部向量庫建立完成！")
 
+# ---- 執行模型初始化與 run_all_indexing ----
 if __name__ == "__main__":
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-base-zh")
+    hf_model = AutoModel.from_pretrained("BAAI/bge-base-zh").to(device).eval()
     run_all_indexing(
         nlpcc_input_path="/content/NLPCC-MH/data/nlpcc-mh.train_sememe.jsonl",
         nlpcc_index_path="/content/index.faiss",
