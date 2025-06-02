@@ -1,6 +1,5 @@
 #check.py
 
-你說：
 import re
 import json
 from collections import defaultdict
