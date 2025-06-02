@@ -40,7 +40,11 @@ def flatten_sememe_data(data, path=None, results=None):
                 "zh": zh_main,
                 "en": item.get("en", ""),
                 "synonyms": synonyms,
-                "categories": path.copy()
+                "categories": path.copy(),
+                "related_items": item.get("related_items", []),
+                "linked_sememe": item.get("linked_sememe", {}),
+                "tags": item.get("tags", []),
+                "concepts": item.get("concepts", {})
             }
 
     if "categories" in data and isinstance(data["categories"], dict):
@@ -59,23 +63,180 @@ def flatten_sememe_data(data, path=None, results=None):
 
     return results
 
-# 對應前綴 → 分類型別
+# 分類邏輯設定
 CATEGORY_PREFIX_TO_TYPE = {
-    "tw-geo-": "geo_feature",
-    "tw-climate-": "climate",
-    "tw-weather-": "weather",
-    "weather-air-quality-": "weather",
-    "weather-season-": "weather",
-    "weather-optical-": "weather",
-    "climate-types-": "climate",
-    "tw-city-": "location",
+    # Basic
+    "basic-schema": "basic",
+    "basic-category": "basic",
+    "basic-": "basic",
+
+    # Geo
+    "geo-category": "geo_feature",
+    "geo-": "geo_feature",
+
+    # Politics
+    "pol-category": "politics",
+    "pol-": "politics",
+
+    # Economy
+    "eco-category": "economy",
+    "econ-": "economy",
+
+    # Society
+    "soc-category": "society",
+    "soc-": "society",
+
+    # Tech
+    "tech-category": "technology",
+    "tech-": "technology",
+
+    # History
+    "hist-category": "history",
+    "hist-": "history",
+
+    # Environment
+    "env-category": "environment",
+    "env-": "environment",
+
+    # Infrastructure
+    "infra-category": "infrastructure",
+    "infra-": "infrastructure",
+
+    # Tourism
+    "tour-category": "tourism",
+    "tour-": "tourism",
+
+    # International
+    "intl-category": "international",
+    "intl-": "international",
+
+    # Health
+    "health-category": "health",
+    "health-": "health",
+
+    # Agriculture
+    "agri-category": "agriculture",
+    "agri-": "agriculture",
+
+    # Legal
+    "legal-category": "legal",
+    "legal-": "legal",
+
+    # Media
+    "media-category": "media",
+    "media-": "media",
+
+    # Culture
+    "culture-category": "culture",
+    "culture-": "culture",
+
+    # Science
+    "sci-category": "science",
+    "sci-": "science",
+
+    # Defense
+    "def-category": "defense",
+    "def-": "defense",
+
+    # Transport
+    "trans-category": "transport",
+    "trans-": "transport",
+
+    # Finance
+    "fin-category": "finance",
+    "fin-": "finance",
+
+    # Energy
+    "energy-category": "energy",
+    "energy-": "energy",
+
+    # Crisis
+    "crisis-category": "crisis",
+    "crisis-": "crisis",
+
+    # Population
+    "pop-category": "population",
+    "pop-": "population",
+
+    # Urban
+    "urban-category": "urban",
+    "urban-": "urban",
+
+    # Taiwan - Basic
+    "tw-basic-schema": "location",
+    "tw-basic-category": "location",
     "tw-basic-": "location",
+
+    # Taiwan - Geo
+    "tw-geo-category": "geo_feature",
+    "tw-geo-": "geo_feature",
+    "tw-geo-water-category": "geo_feature",
+    "tw-geo-water-": "geo_feature",
+    "tw-geo-geology-category": "geo_feature",
+    "tw-geo-geology-": "geo_feature",
+    "tw-geo-coast-category": "geo_feature",
+    "tw-geo-coast-": "geo_feature",
+    "tw-geo-nature-category": "geo_feature",
+    "tw-geo-nature-": "geo_feature",
+
+    # Taiwan - City
+    "tw-city-schema": "location",
+    "tw-city-direct-category": "location",
+    "tw-city-direct-": "location",
+    "tw-city-provincial-category": "location",
+    "tw-city-provincial-": "location",
+    "tw-city-county-category": "location",
+    "tw-city-county-": "location",
+    "tw-city-countycity-category": "location",
+    "tw-city-countycity-": "location",
+    "tw-city-district-category": "location",
+    "tw-city-district-": "location",
+
+    # Taiwan - Climate
+    "tw-climate-schema": "climate",
+    "climate-types-category": "climate",
+    "tw-climate-type-": "climate",
+    "tw-climate-phenomenon-category": "climate",
+    "tw-climate-phenomenon-": "climate",
+    "tw-climate-indicator-category": "climate",
+    "tw-climate-indicator-": "climate",
+    "tw-climate-extreme-category": "climate",
+    "tw-climate-extreme-": "climate",
+    "tw-climate-change-category": "climate",
+    "tw-climate-change-": "climate",
+    "tw-climate-disaster-category": "climate",
+    "tw-climate-disaster-": "climate",
+    "tw-climate-technology-category": "climate",
+    "tw-climate-technology-": "climate",
+
+    # Taiwan - Weather
+    "tw-weather-schema": "weather",
+    "tw-weather-clear-category": "weather",
+    "tw-weather-clear-": "weather",
+    "tw-weather-rain-category": "weather",
+    "tw-weather-rain-": "weather",
+    "tw-weather-temp-category": "weather",
+    "tw-weather-temp-": "weather",
+    "tw-weather-wind-category": "weather",
+    "tw-weather-wind-": "weather",
+    "tw-weather-vis-category": "weather",
+    "tw-weather-vis-": "weather",
+    "tw-weather-severe-category": "weather",
+    "tw-weather-severe-": "weather",
+
+    # Global Weather Categories
+    "weather-air-quality-category": "weather",
+    "weather-air-quality-": "weather",
+    "weather-season-category": "weather",
+    "weather-season-": "weather",
+    "weather-optical-category": "weather",
+    "weather-optical-": "weather"
 }
 
 WEATHER_OVERRIDE = ["冷鋒", "暖鋒", "滯留鋒", "鋒面雨", "雷陣雨", "短時強降雨", "間歇性小雨", "霜凍", "揚沙", "晴朗無雲", "大雷雨", "豪雨", "雷擊"]
 CLIMATE_EXCLUDE_FROM_WEATHER = ["強降雨事件", "年降雨量", "梅雨季", "平均氣溫變化", "氣候區劃"]
 
-# 分類主邏輯
+# 主分類邏輯
 def build_precise_maps(flattened_data):
     category_term_sets = defaultdict(set)
     custom_synonym_map = {}
@@ -99,10 +260,12 @@ def build_precise_maps(flattened_data):
         entry["classification"] = []
         entry["triggered_by"] = []
 
+        categories = [c.lower() for c in entry.get("categories", [])]
+        related_items = [r.lower() for r in entry.get("related_items", [])]
         classified = False
 
-        # 優先從 categories 判斷分類
-        for cat in entry.get("categories", []):
+        # 1. 直接由 category ID 判斷
+        for cat in categories:
             for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
                 if cat.startswith(prefix):
                     entry["classification"].append(cat_type)
@@ -114,7 +277,7 @@ def build_precise_maps(flattened_data):
             if classified:
                 break
 
-        # 如果還沒分類，嘗試從 id 推斷分類
+        # 2. 從 id 推斷
         if not classified:
             item_id = key.lower()
             for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
@@ -126,10 +289,9 @@ def build_precise_maps(flattened_data):
                     classified = True
                     break
 
-        # 如果還沒分類，嘗試從 related_items 判斷
+        # 3. 從 related_items 判斷
         if not classified:
-            for rel_id in entry.get("related_items", []):
-                rel_id = rel_id.lower()
+            for rel_id in related_items:
                 for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
                     if rel_id.startswith(prefix):
                         entry["classification"].append(cat_type)
@@ -141,25 +303,31 @@ def build_precise_maps(flattened_data):
                 if classified:
                     break
 
-        # 再來從語義詞彙模糊比對（linked_sememe、tags、concepts.related_to）
+        # 4. 從語意欄位 (linked_sememe, tags, concepts.zh, concepts.parent, concepts.related_to)
         if not classified:
             semantic_clues = []
-            for field in ["linked_sememe", "tags", "concepts"]:
-                raw = entry.get(field, {})
-                if isinstance(raw, dict):
-                    semantic_clues += raw.get("zh", []) if isinstance(raw.get("zh"), list) else [raw.get("zh")]
-                    semantic_clues += raw.get("related_to", []) if "related_to" in raw else []
-                elif isinstance(raw, list):
-                    semantic_clues += raw
+            linked = entry.get("linked_sememe", {})
+            if isinstance(linked, dict):
+                semantic_clues += linked.get("zh", []) if isinstance(linked.get("zh"), list) else [linked.get("zh")]
+
+            semantic_clues += entry.get("tags", [])
+            concepts = entry.get("concepts", {})
+            if isinstance(concepts, dict):
+                semantic_clues += concepts.get("related_to", []) if isinstance(concepts.get("related_to"), list) else []
+                if isinstance(concepts.get("zh"), str):
+                    semantic_clues.append(concepts["zh"])
+                if isinstance(concepts.get("parent"), str):
+                    semantic_clues.append(concepts["parent"])
+
             for clue in filter(None, semantic_clues):
                 clue_norm = st.normalize_text(clue)
                 if "氣候" in clue_norm:
                     cat_type = "climate"
-                elif "天氣" in clue_norm or "雷" in clue_norm:
+                elif "天氣" in clue_norm or "雷" in clue_norm or "風" in clue_norm:
                     cat_type = "weather"
-                elif "地理" in clue_norm or "地形" in clue_norm:
+                elif "地理" in clue_norm or "地形" in clue_norm or "山" in clue_norm:
                     cat_type = "geo_feature"
-                elif "城市" in clue_norm or "都市" in clue_norm:
+                elif "城市" in clue_norm or "都市" in clue_norm or "行政" in clue_norm:
                     cat_type = "location"
                 else:
                     continue
@@ -170,7 +338,7 @@ def build_precise_maps(flattened_data):
                 classified = True
                 break
 
-        # fallback：suffix 判斷地理位置
+        # 5. 地理名詞後綴推斷
         if not classified:
             location_suffixes = ["市", "區", "鄉", "鎮", "村", "里", "島"]
             if any(isinstance(w, str) and w and w[-1] in location_suffixes for w in zh_words):
@@ -180,11 +348,11 @@ def build_precise_maps(flattened_data):
                 classified_terms.add(standard_word)
                 classified = True
 
-        # 最後放進未分類集合
+        # 6. 未分類詞
         if not classified:
             unclassified_terms.add(standard_word)
 
-    # 語意矯正再分類
+    # 語意再分類修正
     for word in list(classified_terms):
         original = None
         for cat, terms in category_term_sets.items():
@@ -211,7 +379,7 @@ if __name__ == "__main__":
 
     custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms = build_precise_maps(flattened_data)
 
-    print(f"\n自訂 Synonym Map 已載入，共 {len(custom_synonym_map)} 筆\n")
+    print(f"\n✅ 自訂 Synonym Map 已載入，共 {len(custom_synonym_map)} 筆\n")
     for cat, terms in category_term_sets.items():
         print(f"分類「{cat}」詞彙數量：{len(terms)}")
         print(f"  ⤷ 範例：{list(terms)[:10]}\n")
