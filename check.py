@@ -239,7 +239,7 @@ CLIMATE_EXCLUDE_FROM_WEATHER = ["強降雨事件", "年降雨量", "梅雨季", 
 # 主分類邏輯
 def build_precise_maps(flattened_data):
     category_term_sets = defaultdict(set)
-    custom_synonym_map = {}）
+    custom_synonym_map = {}
     classified_terms = set()
     unclassified_terms = set()
     reclassified_terms = []
