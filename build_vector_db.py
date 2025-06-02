@@ -66,6 +66,7 @@ def prepare_custom_augmented_data(synonym_path, index_path, meta_path, model, to
             parts = [zh_entry]
 
         parts.extend(synonyms)
+        parts = list(set(filter(None, parts)))  # 去重與清理
 
         description = "、".join(parts) + "。這些是相關語義擴展資訊。"
         merged = f"[Q] {standard_word} [SEP] {description}"
@@ -79,14 +80,15 @@ def prepare_custom_augmented_data(synonym_path, index_path, meta_path, model, to
             "is_location": False
         })
 
-        for cat_name, city_list in categories.items():
-            for city in city_list:
-                texts.append(f"[Q] {city} [SEP] {standard_word}地區")
-                ids.append(f"city_{i}_{city}")
+        # 增補地區向量（僅限分類為 location）
+        if isinstance(entry.get("classification"), list) and "location" in entry["classification"]:
+            for loc_term in parts:
+                texts.append(f"[Q] {loc_term} [SEP] {standard_word}地區")
+                ids.append(f"city_{i}_{loc_term}")
                 metas.append({
-                    "term": city,
+                    "term": loc_term,
                     "synonyms": [],
-                    "categories": {},
+                    "categories": {"location": True},
                     "is_location": True
                 })
 
