@@ -4,6 +4,67 @@ import json
 from tqdm import tqdm
 import sememe_tools as st
 
+# === 自動載入語義/同義詞 mapping ===
+def setup_sememe_synonyms():
+    with open("/content/Weather-AI-Agent/sememe_synonym_OK.json", "r", encoding="utf-8") as f:
+        raw_data = json.load(f)
+    taiwan_data = raw_data.get("Country", {}).get("categories", {}).get("Taiwan", {})
+
+    def flatten_sememe_data(data, path=None, results=None):
+        if results is None:
+            results = {}
+        if path is None:
+            path = []
+        if isinstance(data, dict):
+            if "items" in data:
+                for item in data["items"]:
+                    key = item.get("id") or item.get("zh") or item.get("en")
+                    if not key:
+                        continue
+                    linked = item.get("linked_sememe", {})
+                    zh_syns = linked.get("zh", []) if isinstance(linked, dict) else []
+                    en_syns = linked.get("en", []) if isinstance(linked, dict) else []
+                    zh_syns = zh_syns if isinstance(zh_syns, list) else [zh_syns]
+                    en_syns = en_syns if isinstance(en_syns, list) else [en_syns]
+                    synonyms = list(set(filter(None, zh_syns + en_syns + item.get("synonyms", []))))
+                    zh_main = item.get("zh") or (zh_syns[0] if zh_syns else "")
+                    results[key] = {
+                        "zh": zh_main,
+                        "en": item.get("en", ""),
+                        "synonyms": synonyms,
+                        "categories": path.copy()
+                    }
+            if "categories" in data:
+                for cat_name, cat_data in data["categories"].items():
+                    flatten_sememe_data(cat_data, path + [cat_name], results)
+        return results
+
+    flattened_data = flatten_sememe_data(taiwan_data)
+
+    def build_custom_synonym_map(flattened_data):
+        def normalize(text):
+            return text.lower().replace(" ", "")
+        custom_synonym_map = {}
+        for entry in flattened_data.values():
+            zh_entry = entry.get("zh") or ""
+            synonyms = entry.get("synonyms", [])
+            all_words = [zh_entry] + synonyms
+            standard_word = normalize(zh_entry) if zh_entry else None
+            if not standard_word:
+                continue
+            for word in all_words:
+                if isinstance(word, str) and word:
+                    custom_synonym_map[normalize(word)] = standard_word
+        return custom_synonym_map
+
+    custom_synonym_map = build_custom_synonym_map(flattened_data)
+    st.set_custom_synonym_map(custom_synonym_map)
+    st.set_custom_synonyms(flattened_data)
+
+# 初始化 custom mapping
+setup_sememe_synonyms()
+# === end of setup ===
+
 def process_nlpccmh_sample(sample, base_id="nlpcc", index=0):
     result = []
     question = sample["q"]
