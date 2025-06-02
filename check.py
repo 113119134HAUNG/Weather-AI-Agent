@@ -125,7 +125,7 @@ def build_precise_maps(flattened_data):
     return custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms
 
 # 主程式
-with open("/content/sememe_synonym_OK.json", "r", encoding="utf-8") as f:
+with open("/content/Weather-AI-Agent/sememe_synonym_OK.json", "r", encoding="utf-8") as f:
     raw_data = json.load(f)
 
 taiwan_data = raw_data.get("Country", {}).get("categories", {}).get("Taiwan", {})
