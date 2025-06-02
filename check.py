@@ -60,7 +60,6 @@ def flatten_sememe_data(data, path=None, results=None):
             if isinstance(value, dict):
                 if any(k in value for k in ("items", "categories", "subcategories")):
                     flatten_sememe_data(value, path + [key], results)
-
     return results
 
 # 分類邏輯設定
@@ -250,12 +249,10 @@ def build_precise_maps(flattened_data):
         zh_words = zh_entry if isinstance(zh_entry, list) else [zh_entry]
         all_words = zh_words + synonyms
 
-        # 取得標準化的主要詞彙
         standard_word = st.normalize_text(zh_words[0]) if zh_words and zh_words[0] else None
         if not standard_word:
             continue
 
-        # 建立所有同義詞的對應關係
         for word in all_words:
             if isinstance(word, str) and word:
                 custom_synonym_map[st.normalize_text(word)] = standard_word
@@ -263,12 +260,11 @@ def build_precise_maps(flattened_data):
         entry["classification"] = []
         entry["triggered_by"] = []
 
-        # 前處理：取出分類線索
         categories = [c.lower() for c in entry.get("categories", [])]
-        related_items = [r.lower() for r in entry.get("related_items", [])]
+        related_items = [r.lower() for r in entry.get("related_items", []) if isinstance(r, str)]
         classified = False
 
-        # 從 categories 判斷分類
+        # 分類依據 categories
         for cat in categories:
             for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
                 if cat.startswith(prefix):
@@ -281,7 +277,7 @@ def build_precise_maps(flattened_data):
             if classified:
                 break
 
-        # 從 ID 前綴判斷
+        # 分類依據 ID
         if not classified:
             item_id = key.lower()
             for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
@@ -293,7 +289,7 @@ def build_precise_maps(flattened_data):
                     classified = True
                     break
 
-        # 從 related_items 判斷
+        # 分類依據 related_items
         if not classified:
             for rel_id in related_items:
                 for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
@@ -307,15 +303,13 @@ def build_precise_maps(flattened_data):
                 if classified:
                     break
 
-        # 從語意線索推論分類（linked_sememe、tags、concepts）
+        # 語意推斷分類
         if not classified:
             semantic_clues = []
             linked = entry.get("linked_sememe", {})
             if isinstance(linked, dict):
                 semantic_clues += linked.get("zh", []) if isinstance(linked.get("zh"), list) else [linked.get("zh")]
-
             semantic_clues += entry.get("tags", [])
-
             concepts = entry.get("concepts", {})
             if isinstance(concepts, dict):
                 semantic_clues += concepts.get("related_to", []) if isinstance(concepts.get("related_to"), list) else []
@@ -336,7 +330,6 @@ def build_precise_maps(flattened_data):
                     cat_type = "location"
                 else:
                     continue
-
                 entry["classification"].append(cat_type)
                 entry["triggered_by"].append("語意線索：" + clue)
                 category_term_sets[cat_type].add(zh_words[0])
@@ -344,7 +337,7 @@ def build_precise_maps(flattened_data):
                 classified = True
                 break
 
-        # 依據地名詞尾判斷是否為 location
+        # 詞尾判斷 location
         if not classified:
             location_suffixes = ["市", "區", "鄉", "鎮", "村", "里"]
             if any(isinstance(w, str) and w and w[-1] in location_suffixes for w in zh_words):
@@ -354,11 +347,11 @@ def build_precise_maps(flattened_data):
                 classified_terms.add(zh_words[0])
                 classified = True
 
-        # 無法分類者
+        # 無法分類
         if not classified:
             unclassified_terms.add(zh_words[0])
 
-    # 根據關鍵詞重新分類為 weather
+    # 語意矯正：強制歸類為 weather
     for word in list(classified_terms):
         original = None
         for cat, terms in category_term_sets.items():
@@ -385,7 +378,7 @@ if __name__ == "__main__":
 
     custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms = build_precise_maps(flattened_data)
 
-    print(f"\n✅ 自訂 Synonym Map 已載入，共 {len(custom_synonym_map)} 筆\n")
+    print(f"\n自訂 Synonym Map 已載入，共 {len(custom_synonym_map)} 筆\n")
     for cat, terms in category_term_sets.items():
         print(f"分類「{cat}」詞彙數量：{len(terms)}")
         print(f"  ⤷ 範例：{list(terms)[:10]}\n")
