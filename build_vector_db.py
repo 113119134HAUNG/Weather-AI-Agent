@@ -156,7 +156,7 @@ if __name__ == "__main__":
         nlpcc_input_path="/content/NLPCC-MH/data/nlpcc-mh.train_sememe.jsonl",
         nlpcc_index_path="/content/index.faiss",
         nlpcc_meta_path="/content/metadata.jsonl",
-        synonym_path="/content/Weather-AI-Agent/sememe_synonym.json",
+        synonym_path="/content/Weather-AI-Agent/flattened_sememe_synonym.json",
         custom_index_path="/content/custom_index.faiss",
         custom_meta_path="/content/custom_metadata.jsonl",
         model=hf_model,
