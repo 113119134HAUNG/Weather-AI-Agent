@@ -1,4 +1,4 @@
-%%writefile requirements.txt
+%%writefile /content/Weather-AI-Agent/requirements.txt
 anytree
 OpenHowNet
 opencc-python-reimplemented
