@@ -1,7 +1,8 @@
 #check.py
 
-import json
 import re
+import json
+import sememe_tools as st_module
 from collections import defaultdict
 
 # 簡易文字正規化
