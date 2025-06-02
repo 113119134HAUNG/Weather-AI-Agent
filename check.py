@@ -21,6 +21,8 @@ def flatten_sememe_data(data, path=None, results=None):
     if isinstance(data, dict):
         if "items" in data:
             for item in data["items"]:
+                if not isinstance(item, dict):
+                    continue  # 防呆：略過非 dict 類型
                 key = item.get("id") or item.get("zh") or item.get("en")
                 if not key:
                     continue
@@ -30,7 +32,6 @@ def flatten_sememe_data(data, path=None, results=None):
                 zh_syns = zh_syns if isinstance(zh_syns, list) else [zh_syns]
                 en_syns = en_syns if isinstance(en_syns, list) else [en_syns]
                 synonyms = list(set(filter(None, zh_syns + en_syns + item.get("synonyms", []))))
-                # 強化主詞：如果沒有zh，直接抓linked_sememe首個zh
                 zh_main = item.get("zh") or (zh_syns[0] if zh_syns else "")
                 results[key] = {
                     "zh": zh_main,
@@ -50,20 +51,18 @@ def flatten_sememe_data(data, path=None, results=None):
 
 # 類別定義與優先順序
 CATEGORY_TREE = {
-    "geo_feature": ["地形地貌", "水文環境", "火山與地質", "海洋與沿岸", "國家公園與自然保護區", "特殊自然景觀"],
-    "climate": ["氣候", "氣候變遷", "季風", "乾季", "濕季", "氣候災害"],
-    "weather": ["天氣", "晴朗與雲量變化", "降水與雷雨現象", "特殊降水與冰雪現象", "能見度與空氣現象", "極端天氣與災害", "鋒面與氣候變化", "天氣現象"],
-    "location": ["直轄市", "省轄市", "縣", "縣轄市", "區", "鄉", "鎮", "城市", "都市區", "村", "里", "行政區"]
-}
-CATEGORY_PRIORITY = ["geo_feature", "climate", "weather", "location"]
+    "geo_feature": ["地理", "地理特徵", "水文環境", "地質斷層", "港口與海洋經濟", "國家公園與自然保護區"],
+    "climate": ["氣候", "氣候類型", "氣候現象與季節變化", "氣候指標與統計", "氣候異常與自然災害", "氣候變遷趨勢", "氣候災害與應對", "氣象科技與監測"],
+    "weather": ["天氣", "晴朗與雲量變化", "降水與雷雨現象", "溫度變化", "風力狀況", "能見度與霧象", "劇烈天氣事件","空氣品質與污染", "季節天氣模式", "大氣光學現象"],
+    "location": ["直轄市", "省轄市", "縣", "縣轄市", "區", "鄉", "鎮", "城市", "都市區", "村", "里", "行政區","縣轄市/鎮/鄉"]}
 
 # 語意矯正設定
-WEATHER_OVERRIDE = ["冷鋒", "暖鋒", "滯留鋒", "鋒面雨", "雷陣雨", "短時強降雨", "間歇性小雨", "霜凍", "揚沙", "晴朗無雲"]
-CLIMATE_EXCLUDE_FROM_WEATHER = ["強降雨事件", "年降雨量", "梅雨季"]
+WEATHER_OVERRIDE = ["冷鋒", "暖鋒", "滯留鋒", "鋒面雨", "雷陣雨", "短時強降雨", "間歇性小雨","霜凍", "揚沙", "晴朗無雲", "大雷雨", "豪雨", "雷擊"]
+CLIMATE_EXCLUDE_FROM_WEATHER = ["強降雨事件", "年降雨量", "梅雨季", "平均氣溫變化", "氣候區劃"]
 
 # 精準分類 + 語意補正 + fallback 城市詞尾判斷
 def build_precise_maps(flattened_data):
-    category_term_sets = {cat: set() for cat in CATEGORY_TREE.keys()}
+    category_term_sets = {cat: set() for cat in CATEGORY_TREE}
     custom_synonym_map = {}
     classified_terms = set()
     unclassified_terms = set()
@@ -79,7 +78,6 @@ def build_precise_maps(flattened_data):
         if not standard_word:
             continue
 
-        # 建立 synonym map（主詞、同義詞、linked_sememe全部納入）
         for word in all_words:
             if isinstance(word, str) and word:
                 custom_synonym_map[st.normalize_text(word)] = standard_word
@@ -100,7 +98,6 @@ def build_precise_maps(flattened_data):
                 classified = True
                 break
 
-        # fallback 城市詞尾判斷
         if not classified:
             location_suffixes = ["市", "區", "鄉", "鎮", "村", "里", "島"]
             if any(isinstance(w, str) and w and w[-1] in location_suffixes for w in zh_words):
@@ -113,7 +110,6 @@ def build_precise_maps(flattened_data):
         if not classified:
             unclassified_terms.add(standard_word)
 
-    # 語意矯正 weather 與 climate 的誤歸類
     for word in list(classified_terms):
         original = None
         for cat, terms in category_term_sets.items():
@@ -129,37 +125,33 @@ def build_precise_maps(flattened_data):
 
     return custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms
 
-# ---- 只有直接執行時才跑處理流程與印出 ----
+# 主程式執行區
 if __name__ == "__main__":
     import sememe_tools as st_module
 
-    # 讀取原始資料
     with open("/content/Weather-AI-Agent/sememe_synonym_OK.json", "r", encoding="utf-8") as f:
         raw_data = json.load(f)
 
-    # 展平資料
-    taiwan_data = raw_data.get("Country", {}).get("categories", {}).get("Taiwan", {})
-    flattened_data = flatten_sememe_data(taiwan_data)
+    # 展平整份 JSON
+    flattened_data = flatten_sememe_data(raw_data)
 
-    # 分類與生成 mapping
     custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms = build_precise_maps(flattened_data)
 
-    # 結果輸出
     print(f"\n自訂 Synonym Map 已載入，共 {len(custom_synonym_map)} 筆\n")
     for cat, terms in category_term_sets.items():
         print(f"分類「{cat}」詞彙數量：{len(terms)}")
-        print(f"範例：{list(terms)[:10]}\n")
+        print(f"  ⤷ 範例：{list(terms)[:10]}\n")
 
     total_classified = sum(len(terms) for terms in category_term_sets.values())
     print(f"已分類詞彙總數：{total_classified}")
     print(f"未分類詞彙總數：{len(unclassified_terms)}")
     if unclassified_terms:
-        print(f"未分類範例：{list(unclassified_terms)[:10]}")
+        print(f"  ⤷ 未分類範例：{list(unclassified_terms)[:10]}")
     if reclassified_terms:
         print("\n語意矯正重新分類：")
         for word, from_cat, to_cat in reclassified_terms:
             print(f"    {word}：{from_cat} → {to_cat}")
 
-    # 設定 custom_synonym_map 和 custom_synonyms 給 sememe_tools
+    # 將 Synonym Map 設定到工具模組
     st_module.set_custom_synonym_map(custom_synonym_map)
     st_module.set_custom_synonyms(flattened_data)
