@@ -173,6 +173,3 @@ def easy_search_all(
 
     sorted_results = sorted(all_results, key=lambda x: x["score"], reverse=True)[:topk]
     return sorted_results
-
-# 完成訊息
-print("vector_utils_advanced 模組載入完成！")
