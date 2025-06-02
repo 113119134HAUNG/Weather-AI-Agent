@@ -8,42 +8,11 @@ from collections import defaultdict
 class SimpleNormalizer:
     @staticmethod
     def normalize_text(text):
-        return re.sub(r"\s+", "", text.lower())
+        return re.sub(r"\s+", "", str(text).lower())
 
 st = SimpleNormalizer()
 
-# 讀取自製 Synonyms 資料
-with open("/content/Weather-AI-Agent/sememe_synonym_OK.json", "r", encoding="utf-8") as f:
-    custom_synonyms = json.load(f)
-
-# 建立 custom_synonym_map, location_terms, weather_terms
-custom_synonym_map = {}
-location_terms = set()
-weather_terms = set()
-
-for key, entry in custom_synonyms.items():
-    zh_entry = entry.get("zh", key)
-    zh_words = zh_entry if isinstance(zh_entry, list) else [zh_entry]
-
-    # 選第一個作為標準化詞
-    standard_word = st.normalize_text(zh_words[0])
-
-    # 主詞 + 同義詞都標準化
-    for word in zh_words:
-        if isinstance(word, str):
-            custom_synonym_map[st.normalize_text(word)] = standard_word
-    for syn in entry.get("synonyms", []):
-        if isinstance(syn, str):
-            custom_synonym_map[st.normalize_text(syn)] = standard_word
-
-    # 分類地名與天氣詞
-    categories = entry.get("categories", {})
-    target_set = location_terms if any(c in categories for c in ["直轄市", "省轄市", "縣", "縣轄市", "區", "鎮", "鄉"]) else weather_terms
-    for w in zh_words:
-        if isinstance(w, str):
-            target_set.add(st.normalize_text(w))
-
-# 扁平化資料結構
+# 扁平化資料結構（主詞、同義詞、linked_sememe 詞全納入）
 def flatten_sememe_data(data, path=None, results=None):
     if results is None:
         results = {}
@@ -56,15 +25,15 @@ def flatten_sememe_data(data, path=None, results=None):
                 if not key:
                     continue
                 linked = item.get("linked_sememe", {})
-                synonyms = []
-                if isinstance(linked, dict):
-                    zh_syns = linked.get("zh", [])
-                    en_syns = linked.get("en", [])
-                    zh_syns = zh_syns if isinstance(zh_syns, list) else [zh_syns]
-                    en_syns = en_syns if isinstance(en_syns, list) else [en_syns]
-                    synonyms = list(set(filter(None, zh_syns + en_syns)))
+                zh_syns = linked.get("zh", []) if isinstance(linked, dict) else []
+                en_syns = linked.get("en", []) if isinstance(linked, dict) else []
+                zh_syns = zh_syns if isinstance(zh_syns, list) else [zh_syns]
+                en_syns = en_syns if isinstance(en_syns, list) else [en_syns]
+                synonyms = list(set(filter(None, zh_syns + en_syns + item.get("synonyms", []))))
+                # 強化主詞：如果沒有zh，直接抓linked_sememe首個zh
+                zh_main = item.get("zh") or (zh_syns[0] if zh_syns else "")
                 results[key] = {
-                    "zh": item.get("zh", ""),
+                    "zh": zh_main,
                     "en": item.get("en", ""),
                     "synonyms": synonyms,
                     "categories": path.copy()
@@ -87,7 +56,7 @@ CATEGORY_PRIORITY = ["geo_feature", "climate", "weather", "location"]
 WEATHER_OVERRIDE = ["冷鋒", "暖鋒", "滯留鋒", "鋒面雨", "雷陣雨", "短時強降雨", "間歇性小雨", "霜凍", "揚沙", "晴朗無雲"]
 CLIMATE_EXCLUDE_FROM_WEATHER = ["強降雨事件", "年降雨量", "梅雨季"]
 
-# 精準分類 + 語意補正 + fallback 城市判斷
+# 精準分類 + 語意補正 + fallback 城市詞尾判斷
 def build_precise_maps(flattened_data):
     category_term_sets = {cat: set() for cat in CATEGORY_TREE.keys()}
     custom_synonym_map = {}
@@ -99,12 +68,15 @@ def build_precise_maps(flattened_data):
         zh_entry = entry.get("zh", key)
         synonyms = entry.get("synonyms", [])
         zh_words = zh_entry if isinstance(zh_entry, list) else [zh_entry]
-        standard_word = st.normalize_text(zh_words[0]) if zh_words else None
+        all_words = zh_words + synonyms
+
+        standard_word = st.normalize_text(zh_words[0]) if zh_words and zh_words[0] else None
         if not standard_word:
             continue
 
-        for word in zh_words + synonyms:
-            if isinstance(word, str):
+        # 建立 synonym map（主詞、同義詞、linked_sememe全部納入）
+        for word in all_words:
+            if isinstance(word, str) and word:
                 custom_synonym_map[st.normalize_text(word)] = standard_word
 
         path = entry.get("categories", [])
@@ -126,7 +98,7 @@ def build_precise_maps(flattened_data):
         # fallback 城市詞尾判斷
         if not classified:
             location_suffixes = ["市", "區", "鄉", "鎮", "村", "里", "島"]
-            if any(isinstance(w, str) and w.endswith(tuple(location_suffixes)) for w in zh_words):
+            if any(isinstance(w, str) and w and w[-1] in location_suffixes for w in zh_words):
                 category_term_sets["location"].add(standard_word)
                 entry["classification"].append("location")
                 entry["triggered_by"].append("suffix_match")
@@ -143,7 +115,6 @@ def build_precise_maps(flattened_data):
             if word in terms:
                 original = cat
                 break
-
         if any(keyword in word for keyword in WEATHER_OVERRIDE):
             if word not in CLIMATE_EXCLUDE_FROM_WEATHER and original != "weather":
                 if original:
