@@ -14,6 +14,7 @@ custom_sememe_relations = {}
 try:
     OpenHowNet.download()
 except Exception as e:
+    # 建議改用 logging 或完全移除
     pass
 
 hownet = OpenHowNet.HowNetDict()
@@ -25,6 +26,7 @@ def normalize_text(text):
 
 def inject_all_hownet_words(verbose=False):
     if verbose:
+        print("正在注入 HowNet 詞彙進 jieba ...")
     all_words = set(sense.zh_word for sense in hownet.get_all_senses() if sense.zh_word)
     for word in all_words:
         try:
@@ -186,5 +188,7 @@ def get_related_sememes(sememe_name):
             related.add(k)
     return sorted(list(related))
 
+# 只在直接執行才顯示提示
 if __name__ == "__main__":
     inject_all_hownet_words(verbose=True)
+    print("sememe_tools 完成初始化！")
