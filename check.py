@@ -148,3 +148,7 @@ if reclassified_terms:
     print("\n語意矯正重新分類：")
     for word, from_cat, to_cat in reclassified_terms:
         print(f"    {word}：{from_cat} → {to_cat}")
+
+# 設定 custom_synonym_map 和 custom_synonyms 給 sememe_tools
+st.set_custom_synonym_map(custom_synonym_map)
+st.set_custom_synonyms(custom_synonyms)
