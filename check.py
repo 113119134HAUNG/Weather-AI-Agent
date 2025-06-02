@@ -38,9 +38,14 @@ def flatten_sememe_data(data, path=None, results=None):
                     "synonyms": synonyms,
                     "categories": path.copy()
                 }
+        # 遞迴 categories
         if "categories" in data:
             for cat_name, cat_data in data["categories"].items():
                 flatten_sememe_data(cat_data, path + [cat_name], results)
+        # 遞迴 subcategories
+        if "subcategories" in data:
+            for subcat_name, subcat_data in data["subcategories"].items():
+                flatten_sememe_data(subcat_data, path + [subcat_name], results)
     return results
 
 # 類別定義與優先順序
