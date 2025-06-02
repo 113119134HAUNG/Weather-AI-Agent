@@ -397,3 +397,9 @@ if __name__ == "__main__":
 
     st_module.set_custom_synonym_map(custom_synonym_map)
     st_module.set_custom_synonyms(flattened_data)
+    
+# 儲存json
+with open("/content/Weather-AI-Agent/flattened_sememe_synonym.json", "w", encoding="utf-8") as f:
+    json.dump(flattened_data, f, ensure_ascii=False, indent=2)
+
+print("已將展平結果儲存為 flattened_sememe_synonym.json")
