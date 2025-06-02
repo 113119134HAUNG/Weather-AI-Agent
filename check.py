@@ -126,30 +126,34 @@ def build_precise_maps(flattened_data):
     return custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms
 
 # 主程式
-with open("/content/Weather-AI-Agent/sememe_synonym_OK.json", "r", encoding="utf-8") as f:
-    raw_data = json.load(f)
+if __name__ == "__main__":
+    # 讀取原始資料
+    with open("/content/Weather-AI-Agent/sememe_synonym_OK.json", "r", encoding="utf-8") as f:
+        raw_data = json.load(f)
 
-taiwan_data = raw_data.get("Country", {}).get("categories", {}).get("Taiwan", {})
-flattened_data = flatten_sememe_data(taiwan_data)
+    # 展平資料
+    taiwan_data = raw_data.get("Country", {}).get("categories", {}).get("Taiwan", {})
+    flattened_data = flatten_sememe_data(taiwan_data)
 
-custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms = build_precise_maps(flattened_data)
+    # 分類與生成 mapping
+    custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms = build_precise_maps(flattened_data)
 
-# 結果輸出
-print(f"\n自訂 Synonym Map 已載入，共 {len(custom_synonym_map)} 筆\n")
-for cat, terms in category_term_sets.items():
-    print(f"分類「{cat}」詞彙數量：{len(terms)}")
-    print(f"範例：{list(terms)[:10]}\n")
+    # 結果輸出
+    print(f"\n自訂 Synonym Map 已載入，共 {len(custom_synonym_map)} 筆\n")
+    for cat, terms in category_term_sets.items():
+        print(f"分類「{cat}」詞彙數量：{len(terms)}")
+        print(f"範例：{list(terms)[:10]}\n")
 
-total_classified = sum(len(terms) for terms in category_term_sets.values())
-print(f"已分類詞彙總數：{total_classified}")
-print(f"未分類詞彙總數：{len(unclassified_terms)}")
-if unclassified_terms:
-    print(f"未分類範例：{list(unclassified_terms)[:10]}")
-if reclassified_terms:
-    print("\n語意矯正重新分類：")
-    for word, from_cat, to_cat in reclassified_terms:
-        print(f"    {word}：{from_cat} → {to_cat}")
+    total_classified = sum(len(terms) for terms in category_term_sets.values())
+    print(f"已分類詞彙總數：{total_classified}")
+    print(f"未分類詞彙總數：{len(unclassified_terms)}")
+    if unclassified_terms:
+        print(f"未分類範例：{list(unclassified_terms)[:10]}")
+    if reclassified_terms:
+        print("\n語意矯正重新分類：")
+        for word, from_cat, to_cat in reclassified_terms:
+            print(f"    {word}：{from_cat} → {to_cat}")
 
-# 設定 custom_synonym_map 和 custom_synonyms 給 sememe_tools
-st.set_custom_synonym_map(custom_synonym_map)
-st.set_custom_synonyms(custom_synonyms)
+    # 設定 custom_synonym_map 和 custom_synonyms 給 sememe_tools
+    st_module.set_custom_synonym_map(custom_synonym_map)
+    st_module.set_custom_synonyms(flattened_data)
