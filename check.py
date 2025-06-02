@@ -4,7 +4,7 @@ import re
 import json
 from collections import defaultdict
 
-# 簡易文字正規化
+# 正規化工具
 class SimpleNormalizer:
     @staticmethod
     def normalize_text(text):
@@ -40,13 +40,14 @@ def flatten_sememe_data(data, path=None, results=None):
                 "zh": zh_main,
                 "en": item.get("en", ""),
                 "synonyms": synonyms,
-                "categories": path.copy(),
+                "categories": path.copy(),  # <- list，等下會轉換為 dict 給下游使用
                 "related_items": item.get("related_items", []),
                 "linked_sememe": item.get("linked_sememe", {}),
                 "tags": item.get("tags", []),
                 "concepts": item.get("concepts", {})
             }
 
+    # 探入子結構
     if "categories" in data and isinstance(data["categories"], dict):
         for cat_name, cat_data in data["categories"].items():
             flatten_sememe_data(cat_data, path + [cat_name], results)
@@ -56,12 +57,11 @@ def flatten_sememe_data(data, path=None, results=None):
             flatten_sememe_data(subcat_data, path + [subcat_name], results)
 
     for key, value in data.items():
-        if key not in {"items", "categories", "subcategories"}:
-            if isinstance(value, dict):
-                if any(k in value for k in ("items", "categories", "subcategories")):
-                    flatten_sememe_data(value, path + [key], results)
+        if key not in {"items", "categories", "subcategories"} and isinstance(value, dict):
+            if any(k in value for k in ("items", "categories", "subcategories")):
+                flatten_sememe_data(value, path + [key], results)
     return results
-
+    
 # 分類邏輯設定
 CATEGORY_PREFIX_TO_TYPE = {
     # Basic
@@ -232,10 +232,11 @@ CATEGORY_PREFIX_TO_TYPE = {
     "weather-optical-": "weather"
 }
 
+# 天氣優先詞
 WEATHER_OVERRIDE = ["冷鋒", "暖鋒", "滯留鋒", "鋒面雨", "雷陣雨", "短時強降雨", "間歇性小雨", "霜凍", "揚沙", "晴朗無雲", "大雷雨", "豪雨", "雷擊"]
 CLIMATE_EXCLUDE_FROM_WEATHER = ["強降雨事件", "年降雨量", "梅雨季", "平均氣溫變化", "氣候區劃"]
 
-# 主分類邏輯
+# 建構分類與同義詞圖
 def build_precise_maps(flattened_data):
     category_term_sets = defaultdict(set)
     custom_synonym_map = {}
@@ -250,11 +251,9 @@ def build_precise_maps(flattened_data):
         synonyms = entry.get("synonyms", [])
         zh_words = zh_entry if isinstance(zh_entry, list) else [zh_entry]
         all_words = zh_words + synonyms
-
         standard_word = st.normalize_text(zh_words[0]) if zh_words and zh_words[0] else None
         if not standard_word:
             continue
-
         for word in all_words:
             if isinstance(word, str) and word:
                 custom_synonym_map[st.normalize_text(word)] = standard_word
@@ -262,11 +261,16 @@ def build_precise_maps(flattened_data):
         entry["classification"] = []
         entry["triggered_by"] = []
 
-        categories = [c.lower() for c in entry.get("categories", [])]
+        # 將 list 形式 category 改成 dict 給 downstream 使用
+        if isinstance(entry.get("categories"), list):
+            entry["categories"] = {f"cat_{i}": cat for i, cat in enumerate(entry["categories"])}
+
+        # → 把分類 dict 轉回 list 判斷
+        categories = [c.lower() for c in entry.get("categories", {}).values()]
         related_items = [r.lower() for r in entry.get("related_items", []) if isinstance(r, str)]
         classified = False
 
-        # 分類依據 categories
+        # 類別分析邏輯
         for cat in categories:
             for prefix, cat_type in sorted_prefixes:
                 if cat.startswith(prefix):
@@ -279,7 +283,6 @@ def build_precise_maps(flattened_data):
             if classified:
                 break
 
-        # 分類依據 ID
         if not classified:
             item_id = key.lower()
             for prefix, cat_type in sorted_prefixes:
@@ -291,7 +294,6 @@ def build_precise_maps(flattened_data):
                     classified = True
                     break
 
-        # 分類依據 related_items
         if not classified:
             for rel_id in related_items:
                 for prefix, cat_type in sorted_prefixes:
@@ -305,32 +307,27 @@ def build_precise_maps(flattened_data):
                 if classified:
                     break
 
-        # 詞尾推斷地名（提前）
         if not classified:
-            location_suffixes = ["市", "區", "鄉", "鎮", "村", "里"]
-            if any(isinstance(w, str) and w and w[-1] in location_suffixes for w in zh_words):
+            if any(isinstance(w, str) and w and w[-1] in ["市", "區", "鄉", "鎮", "村", "里"] for w in zh_words):
                 category_term_sets["location"].add(zh_words[0])
                 entry["classification"].append("location")
                 entry["triggered_by"].append("詞尾推斷")
                 classified_terms.add(zh_words[0])
                 classified = True
 
-        # 語意推斷分類（最後一步）
         if not classified:
-            semantic_clues = []
+            clues = []
             linked = entry.get("linked_sememe", {})
             if isinstance(linked, dict):
-                semantic_clues += linked.get("zh", []) if isinstance(linked.get("zh"), list) else [linked.get("zh")]
-            semantic_clues += entry.get("tags", [])
+                clues += linked.get("zh", []) if isinstance(linked.get("zh"), list) else [linked.get("zh")]
+            clues += entry.get("tags", [])
             concepts = entry.get("concepts", {})
             if isinstance(concepts, dict):
-                semantic_clues += concepts.get("related_to", []) if isinstance(concepts.get("related_to"), list) else []
-                if isinstance(concepts.get("zh"), str):
-                    semantic_clues.append(concepts["zh"])
-                if isinstance(concepts.get("parent"), str):
-                    semantic_clues.append(concepts["parent"])
+                clues += concepts.get("related_to", []) if isinstance(concepts.get("related_to"), list) else []
+                if isinstance(concepts.get("zh"), str): clues.append(concepts["zh"])
+                if isinstance(concepts.get("parent"), str): clues.append(concepts["parent"])
 
-            for clue in filter(None, semantic_clues):
+            for clue in filter(None, clues):
                 clue_norm = st.normalize_text(clue)
                 if "氣候" in clue_norm:
                     cat_type = "climate"
@@ -349,11 +346,9 @@ def build_precise_maps(flattened_data):
                 classified = True
                 break
 
-        # 無法分類
         if not classified:
             unclassified_terms.add(zh_words[0])
 
-    # 強制矯正為 weather
     for word in list(classified_terms):
         original = None
         for cat, terms in category_term_sets.items():
@@ -369,7 +364,7 @@ def build_precise_maps(flattened_data):
 
     return custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms
 
-# 主程式
+# 執行區域
 if __name__ == "__main__":
     import sememe_tools as st_module
 
@@ -377,6 +372,14 @@ if __name__ == "__main__":
         raw_data = json.load(f)
 
     flattened_data = flatten_sememe_data(raw_data)
+
+    # 修正 categories 格式
+    for entry in flattened_data.values():
+        if isinstance(entry.get("categories"), list):
+            entry["categories"] = {
+                f"cat_{i}": cat for i, cat in enumerate(entry["categories"])
+            }
+
     custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms = build_precise_maps(flattened_data)
 
     print(f"\n自訂 Synonym Map 已載入，共 {len(custom_synonym_map)} 筆\n")
@@ -384,21 +387,20 @@ if __name__ == "__main__":
         print(f"分類「{cat}」詞彙數量：{len(terms)}")
         print(f"範例：{list(terms)[:10]}\n")
 
-    total_classified = sum(len(terms) for terms in category_term_sets.values())
-    print(f" 已分類詞彙總數：{total_classified}")
+    print(f"已分類詞彙總數：{sum(len(terms) for terms in category_term_sets.values())}")
     print(f"未分類詞彙總數：{len(unclassified_terms)}")
     if unclassified_terms:
-        print(f"  ⤷ 未分類範例：{list(unclassified_terms)[:10]}")
+        print(f" ⤷ 未分類例子：{list(unclassified_terms)[:10]}")
 
     if reclassified_terms:
-        print("\n語意矯正重新分類結果：")
+        print("\n語意矯正重新分類：")
         for word, from_cat, to_cat in reclassified_terms:
             print(f" {word}：{from_cat} → {to_cat}")
 
     st_module.set_custom_synonym_map(custom_synonym_map)
     st_module.set_custom_synonyms(flattened_data)
-    
-# 儲存json
-with open("/content/Weather-AI-Agent/flattened_sememe_synonym.json", "w", encoding="utf-8") as f:
-    json.dump(flattened_data, f, ensure_ascii=False, indent=2)
-print("已將展平結果儲存為 flattened_sememe_synonym.json")
+
+    # 儲存結果
+    with open("/content/Weather-AI-Agent/flattened_sememe_synonym.json", "w", encoding="utf-8") as f:
+        json.dump(flattened_data, f, ensure_ascii=False, indent=2)
+    print("已儲存為：flattened_sememe_synonym.json")
