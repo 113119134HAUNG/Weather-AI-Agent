@@ -4,6 +4,45 @@ import json
 import re
 from collections import defaultdict
 
+# 簡易文字正規化
+class SimpleNormalizer:
+    @staticmethod
+    def normalize_text(text):
+        return re.sub(r"\s+", "", text.lower())
+
+st = SimpleNormalizer()
+
+# 讀取自製 Synonyms 資料
+with open("/content/Weather-AI-Agent/sememe_synonym_OK.json", "r", encoding="utf-8") as f:
+    custom_synonyms = json.load(f)
+
+# 建立 custom_synonym_map, location_terms, weather_terms
+custom_synonym_map = {}
+location_terms = set()
+weather_terms = set()
+
+for key, entry in custom_synonyms.items():
+    zh_entry = entry.get("zh", key)
+    zh_words = zh_entry if isinstance(zh_entry, list) else [zh_entry]
+
+    # 選第一個作為標準化詞
+    standard_word = st.normalize_text(zh_words[0])
+
+    # 主詞 + 同義詞都標準化
+    for word in zh_words:
+        if isinstance(word, str):
+            custom_synonym_map[st.normalize_text(word)] = standard_word
+    for syn in entry.get("synonyms", []):
+        if isinstance(syn, str):
+            custom_synonym_map[st.normalize_text(syn)] = standard_word
+
+    # 分類地名與天氣詞
+    categories = entry.get("categories", {})
+    target_set = location_terms if any(c in categories for c in ["直轄市", "省轄市", "縣", "縣轄市", "區", "鎮", "鄉"]) else weather_terms
+    for w in zh_words:
+        if isinstance(w, str):
+            target_set.add(st.normalize_text(w))
+
 # 扁平化資料結構
 def flatten_sememe_data(data, path=None, results=None):
     if results is None:
@@ -34,14 +73,6 @@ def flatten_sememe_data(data, path=None, results=None):
             for cat_name, cat_data in data["categories"].items():
                 flatten_sememe_data(cat_data, path + [cat_name], results)
     return results
-
-# 簡易文字正規化
-class SimpleNormalizer:
-    @staticmethod
-    def normalize_text(text):
-        return re.sub(r"\s+", "", text.lower())
-
-st = SimpleNormalizer()
 
 # 類別定義與優先順序
 CATEGORY_TREE = {
