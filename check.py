@@ -266,7 +266,7 @@ def build_precise_maps(flattened_data):
         related_items = [r.lower() for r in entry.get("related_items", []) if isinstance(r, str)]
         classified = False
 
-        # 1. 分類依據 categories
+        # 分類依據 categories
         for cat in categories:
             for prefix, cat_type in sorted_prefixes:
                 if cat.startswith(prefix):
@@ -279,7 +279,7 @@ def build_precise_maps(flattened_data):
             if classified:
                 break
 
-        # 2. 分類依據 ID
+        # 分類依據 ID
         if not classified:
             item_id = key.lower()
             for prefix, cat_type in sorted_prefixes:
@@ -291,7 +291,7 @@ def build_precise_maps(flattened_data):
                     classified = True
                     break
 
-        # 3. 分類依據 related_items
+        # 分類依據 related_items
         if not classified:
             for rel_id in related_items:
                 for prefix, cat_type in sorted_prefixes:
@@ -305,7 +305,7 @@ def build_precise_maps(flattened_data):
                 if classified:
                     break
 
-        # 4. 詞尾推斷地名（提前）
+        # 詞尾推斷地名（提前）
         if not classified:
             location_suffixes = ["市", "區", "鄉", "鎮", "村", "里"]
             if any(isinstance(w, str) and w and w[-1] in location_suffixes for w in zh_words):
@@ -315,7 +315,7 @@ def build_precise_maps(flattened_data):
                 classified_terms.add(zh_words[0])
                 classified = True
 
-        # 5. 語意推斷分類（最後一步）
+        # 語意推斷分類（最後一步）
         if not classified:
             semantic_clues = []
             linked = entry.get("linked_sememe", {})
@@ -349,11 +349,11 @@ def build_precise_maps(flattened_data):
                 classified = True
                 break
 
-        # 6. 無法分類
+        # 無法分類
         if not classified:
             unclassified_terms.add(zh_words[0])
 
-    # 7. 強制矯正為 weather
+    # 強制矯正為 weather
     for word in list(classified_terms):
         original = None
         for cat, terms in category_term_sets.items():
