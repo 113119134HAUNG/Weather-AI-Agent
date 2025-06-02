@@ -401,5 +401,4 @@ if __name__ == "__main__":
 # 儲存json
 with open("/content/Weather-AI-Agent/flattened_sememe_synonym.json", "w", encoding="utf-8") as f:
     json.dump(flattened_data, f, ensure_ascii=False, indent=2)
-
 print("已將展平結果儲存為 flattened_sememe_synonym.json")
