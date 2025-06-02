@@ -243,6 +243,8 @@ def build_precise_maps(flattened_data):
     unclassified_terms = set()
     reclassified_terms = []
 
+    sorted_prefixes = sorted(CATEGORY_PREFIX_TO_TYPE.items(), key=lambda x: -len(x[0]))
+
     for key, entry in flattened_data.items():
         zh_entry = entry.get("zh", key)
         synonyms = entry.get("synonyms", [])
@@ -266,10 +268,10 @@ def build_precise_maps(flattened_data):
 
         # 分類依據 categories
         for cat in categories:
-            for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
+            for prefix, cat_type in sorted_prefixes:
                 if cat.startswith(prefix):
                     entry["classification"].append(cat_type)
-                    entry["triggered_by"].append(cat)
+                    entry["triggered_by"].append("分類代碼：" + cat)
                     category_term_sets[cat_type].add(zh_words[0])
                     classified_terms.add(zh_words[0])
                     classified = True
@@ -280,7 +282,7 @@ def build_precise_maps(flattened_data):
         # 分類依據 ID
         if not classified:
             item_id = key.lower()
-            for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
+            for prefix, cat_type in sorted_prefixes:
                 if item_id.startswith(prefix):
                     entry["classification"].append(cat_type)
                     entry["triggered_by"].append("依據ID前綴：" + item_id)
@@ -292,7 +294,7 @@ def build_precise_maps(flattened_data):
         # 分類依據 related_items
         if not classified:
             for rel_id in related_items:
-                for prefix, cat_type in CATEGORY_PREFIX_TO_TYPE.items():
+                for prefix, cat_type in sorted_prefixes:
                     if rel_id.startswith(prefix):
                         entry["classification"].append(cat_type)
                         entry["triggered_by"].append("依據關聯ID：" + rel_id)
@@ -351,7 +353,7 @@ def build_precise_maps(flattened_data):
         if not classified:
             unclassified_terms.add(zh_words[0])
 
-    # 語意矯正：強制歸類為 weather
+    # 語意矯正為 weather 類別
     for word in list(classified_terms):
         original = None
         for cat, terms in category_term_sets.items():
@@ -375,23 +377,23 @@ if __name__ == "__main__":
         raw_data = json.load(f)
 
     flattened_data = flatten_sememe_data(raw_data)
-
     custom_synonym_map, category_term_sets, classified_terms, unclassified_terms, reclassified_terms = build_precise_maps(flattened_data)
 
     print(f"\n自訂 Synonym Map 已載入，共 {len(custom_synonym_map)} 筆\n")
     for cat, terms in category_term_sets.items():
         print(f"分類「{cat}」詞彙數量：{len(terms)}")
-        print(f"  ⤷ 範例：{list(terms)[:10]}\n")
+        print(f"範例：{list(terms)[:10]}\n")
 
     total_classified = sum(len(terms) for terms in category_term_sets.values())
-    print(f"已分類詞彙總數：{total_classified}")
+    print(f" 已分類詞彙總數：{total_classified}")
     print(f"未分類詞彙總數：{len(unclassified_terms)}")
     if unclassified_terms:
         print(f"  ⤷ 未分類範例：{list(unclassified_terms)[:10]}")
+
     if reclassified_terms:
-        print("\n語意矯正重新分類：")
+        print("\n語意矯正重新分類結果：")
         for word, from_cat, to_cat in reclassified_terms:
-            print(f"    {word}：{from_cat} → {to_cat}")
+            print(f" {word}：{from_cat} → {to_cat}")
 
     st_module.set_custom_synonym_map(custom_synonym_map)
     st_module.set_custom_synonyms(flattened_data)
