@@ -2,6 +2,7 @@
 
 import re
 import json
+import sememe_tools as st_module
 from collections import defaultdict
 
 # 正規化工具
